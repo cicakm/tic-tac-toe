@@ -16,10 +16,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,6 +44,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.example.tictactoe.ui.theme.TicTacToeTheme
 
 class MainActivity : ComponentActivity() {
@@ -80,18 +84,19 @@ fun checkIfGameEnded(map: SnapshotStateMap<Int, Char>): Boolean {
         listOf(2, 5, 8)
     )
 
-    var index1: Int
-    var index2: Int
-    var index3: Int
-    var value1: Char
-    var value2: Char
-    var value3: Char
+    var index1: Int; var index2: Int; var index3: Int
+    var value1: Char; var value2: Char; var value3: Char
 
     for (indexes in gameWinners) {
         index1 = indexes[0]; index2 = indexes[1]; index3 = indexes[2]
         value1 = map[index1]!!; value2 = map[index2]!!; value3 = map[index3]!!
 
-        if (value1 != Char.MIN_VALUE && value2 != Char.MIN_VALUE && value3 != Char.MIN_VALUE && value1 == value2 && value2 == value3) {
+        if (value1 != Char.MIN_VALUE &&
+            value2 != Char.MIN_VALUE &&
+            value3 != Char.MIN_VALUE &&
+            value1 == value2
+            && value2 == value3
+        ) {
             return true
         }
     }
@@ -149,19 +154,8 @@ fun TicTacToeApp() {
     var player by remember { mutableStateOf(true) }
     var enabled by remember { mutableStateOf(true) }
     var gameEnded by remember { mutableStateOf(false) }
-    val map: SnapshotStateMap<Int, Char> = remember {
-        mutableStateMapOf(
-            0 to Char.MIN_VALUE,
-            1 to Char.MIN_VALUE,
-            2 to Char.MIN_VALUE,
-            3 to Char.MIN_VALUE,
-            4 to Char.MIN_VALUE,
-            5 to Char.MIN_VALUE,
-            6 to Char.MIN_VALUE,
-            7 to Char.MIN_VALUE,
-            8 to Char.MIN_VALUE
-        )
-    }
+    val gameGrid: SnapshotStateMap<Int, Char> = remember { mutableStateMapOf() }
+    initMap(gameGrid)
     var changeable by remember { mutableIntStateOf(-1) }
     val mappedGame: SnapshotStateMap<Char, List<Int>> = remember {
         mutableStateMapOf(
@@ -169,43 +163,69 @@ fun TicTacToeApp() {
             'o' to listOf()
         )
     }
+    var winnersList = remember { mutableListOf<Int>() }
 
     Scaffold(topBar = {
         TopAppBar(title = { Text(text = "Tic Tac Toe 2.0") },
             actions = {
                 IconButton(onClick = {
-                    initMap(map)
+                    initMap(gameGrid)
                     gameEnded = false
                     player = true
                     enabled = true
                     changeable = -1
                     mappedGame['x'] = listOf()
                     mappedGame['o'] = listOf()
+                    winnersList = mutableListOf()
                 }) {
                     Icon(imageVector = Icons.Filled.Refresh, contentDescription = "Restart game")
                 }
             })
     }, modifier = Modifier.fillMaxSize()) { innerPadding ->
+        if (gameEnded) {
+            Dialog(onDismissRequest = {
+                gameEnded = false
+                enabled = false
+            }) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .padding(16.dp),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Text(
+                        text = "Pobijedio je igrač ${if (player) 'X' else 'O'}!!",
+                        fontSize = 24.sp,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .wrapContentSize(Alignment.Center),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
         GameGrid(
             modifier = Modifier.padding(innerPadding),
-            map = map,
-            player = player,
-            gameEnded = gameEnded,
+            gameGrid = gameGrid,
+            winnersList = winnersList,
             enabled = enabled,
             changeable = changeable,
             onBoxClick = { index ->
-                fillMaps(map, mappedGame, index, player)
-                gameEnded = checkIfGameEnded(map)
+                fillMaps(gameGrid, mappedGame, index, player)
+                gameEnded = checkIfGameEnded(gameGrid)
                 if (!gameEnded) {
                     changeable = nextInChange(mappedGame, player)
                     player = !player
                 } else {
                     changeable = -1
+                    winnersList =
+                        if (player) {
+                            mappedGame['x']!!.toMutableList()
+                        } else {
+                            mappedGame['o']!!.toMutableList()
+                        }
                 }
-            },
-            onCloseClick = {
-                enabled = false
-                gameEnded = false
             }
         )
     }
@@ -214,51 +234,37 @@ fun TicTacToeApp() {
 @Composable
 fun GameGrid(
     modifier: Modifier,
-    map: SnapshotStateMap<Int, Char>,
-    player: Boolean,
-    gameEnded: Boolean,
+    gameGrid: SnapshotStateMap<Int, Char>,
+    winnersList: List<Int>,
     enabled: Boolean,
     changeable: Int,
-    onBoxClick: (Int) -> Unit,
-    onCloseClick: () -> Unit
+    onBoxClick: (Int) -> Unit
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(Color.LightGray), verticalArrangement = Arrangement.Center
     ) {
-        if (gameEnded) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable { onCloseClick() },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Pobijedio je igrač ${if (player) 'O' else 'X'}!!",
-                    fontSize = 40.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                modifier = Modifier
-                    .background(Color.Black),
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                items(9) { index ->
-                    val color = if (changeable == index) Color.Red else Color.White
-                    val paddingValues = calculatePadding(index)
-                    BoxInGrid(
-                        paddingValues = paddingValues,
-                        enabled = enabled,
-                        map = map,
-                        index = index,
-                        color = color,
-                        onBoxClick = onBoxClick
-                    )
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            modifier = Modifier
+                .background(Color.Black),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            items(9) { index ->
+                var color = if (changeable == index) Color.Red else Color.White
+                if (winnersList.contains(index)) {
+                    color = Color.Green
                 }
+                val paddingValues = calculatePadding(index)
+                BoxInGrid(
+                    paddingValues = paddingValues,
+                    enabled = enabled,
+                    gameGrid = gameGrid,
+                    index = index,
+                    color = color,
+                    onBoxClick = onBoxClick
+                )
             }
         }
     }
@@ -268,7 +274,7 @@ fun GameGrid(
 fun BoxInGrid(
     paddingValues: PaddingValues,
     enabled: Boolean,
-    map: SnapshotStateMap<Int, Char>,
+    gameGrid: SnapshotStateMap<Int, Char>,
     index: Int,
     color: Color,
     onBoxClick: (Int) -> Unit
@@ -280,13 +286,13 @@ fun BoxInGrid(
             .aspectRatio(1f)
             .fillMaxWidth()
             .height(0.dp)
-            .clickable(enabled = enabled && map[index] == Char.MIN_VALUE) {
+            .clickable(enabled = enabled && gameGrid[index] == Char.MIN_VALUE) {
                 onBoxClick(index)
             },
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = map[index].toString(),
+            text = gameGrid[index].toString(),
             fontSize = 60.sp,
             textAlign = TextAlign.Center
         )
